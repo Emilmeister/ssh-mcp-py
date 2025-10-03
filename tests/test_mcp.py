@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from ssh_mcp.mcp import mcp
+from ssh_mcp.mcp_main import mcp
 
 
 class TestSSHMCPTools:

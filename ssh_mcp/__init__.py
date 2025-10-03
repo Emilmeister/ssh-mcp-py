@@ -4,6 +4,6 @@ load_dotenv()
 
 
 def main():
-    from ssh_mcp import mcp
+    from ssh_mcp import mcp_main
 
     mcp.run()

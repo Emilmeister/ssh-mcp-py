@@ -1,14 +1,17 @@
 """SSH client module for managing SSH connections and command execution, with optional SOCKS5 proxy support."""
-
+import base64
 import json
 import os
 import traceback
+from io import StringIO
 from typing import Any, Dict, List, Optional
 
 import paramiko
 import socks
+from paramiko import RSAKey
 
-from ssh_mcp.model.proxy import ProxyConfig
+from model.proxy import ProxyConfig
+from ssh_config_patch import SshConfigWithPassword
 
 
 class SSHConfig:
@@ -16,18 +19,12 @@ class SSHConfig:
 
     def __init__(self):
         """Initialize SSH configuration by loading from SSH config file."""
-        self.config_file_path = os.getenv(
-            "SSH_CONFIG_PATH", os.path.expanduser("~/.ssh/config")
-        )
         self.ssh_config = self._load_ssh_config()
 
     def _load_ssh_config(self) -> paramiko.SSHConfig:
         """Load SSH configuration from config file."""
         try:
-            ssh_config = paramiko.SSHConfig()
-            if os.path.exists(self.config_file_path):
-                with open(self.config_file_path, "r") as f:
-                    ssh_config.parse(f)
+            ssh_config = SshConfigWithPassword.from_text(base64.b64decode(os.getenv("SSH_CONFIG")).decode('utf-8'))
             return ssh_config
         except Exception:
             traceback.print_exc()
@@ -130,7 +127,7 @@ class SSHClient:
                 hostname=host_config.get("hostname", hostname),
                 port=host_config.get("port", 22),
                 username=host_config.get("user", os.getenv("USER")),
-                key_filename=host_config.get("identityfile"),
+                pkey=RSAKey.from_private_key(StringIO(host_config.get("identityfile")[0])),
                 timeout=command_timeout,
                 sock=sock,
             )

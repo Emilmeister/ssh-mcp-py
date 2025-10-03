@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from ssh_mcp.mcp import mcp
+from ssh_mcp.mcp_main import mcp
 from ssh_mcp.ssh_client import SSHConfig
 
 

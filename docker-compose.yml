@@ -1,0 +1,8 @@
+services:
+  ssh-mcp:
+    build: .
+    ports:
+      - 8000:8000
+    environment:
+      MCP_TRANSPORT: sse
+      SSH_CONFIG: d2ViLXNlcnZlci0wMTo......ZLS0tLS0= (base64 encoded config.yaml)

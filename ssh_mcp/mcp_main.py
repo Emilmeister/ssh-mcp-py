@@ -1,12 +1,14 @@
 """SSH MCP server for managing SSH connections and executing commands on remote hosts."""
-
+import logging
 import os
 import traceback
+from io import StringIO
 
 import paramiko
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
+from paramiko import RSAKey, PKey
 
-from ssh_mcp.ssh_client import SSHClient, SSHConfig
+from ssh_client import SSHClient, SSHConfig
 
 mcp = FastMCP(
     name="ssh-mcp",
@@ -33,8 +35,8 @@ def get_ssh_client() -> SSHClient:
 async def execute_ssh_command(
     hostname: str, 
     command: str, 
-    timeout: int = 30, 
-    max_length: int = 1000
+    timeout: int = 300,
+    max_length: int = 10000
 ) -> str:
     """Execute a command on a remote host via SSH.
 
@@ -117,7 +119,6 @@ async def get_host_info(hostname: str) -> str:
         output += f"Hostname: {host_config.get('hostname', hostname)}\n"
         output += f"Port: {host_config.get('port', 22)}\n"
         output += f"User: {host_config.get('user', 'N/A')}\n"
-        output += f"IdentityFile: {host_config.get('identityfile', 'N/A')}\n"
 
         return output
 
@@ -179,7 +180,7 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
                 hostname=host_config.get("hostname", hostname),
                 port=host_config.get("port", 22),
                 username=host_config.get("user", os.getenv("USER")),
-                key_filename=host_config.get("identityfile"),
+                pkey=RSAKey.from_private_key(StringIO(host_config.get("identityfile")[0])),
                 timeout=command_timeout,
                 sock=sock,
             )
@@ -187,6 +188,7 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
             return f"SUCCESS: Connection to {hostname} successful"
 
         except Exception as e:
+            print(traceback.format_exc())
             return f"ERROR: Connection to {hostname} failed: {str(e)}"
         finally:
             ssh_client.close()
@@ -203,10 +205,12 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
 
 def run():
     """Run the SSH MCP server."""
-    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    transport = os.getenv("MCP_TRANSPORT", "sse")
     if transport == "sse":
-        mcp.run(transport="sse")
+        mcp.run(transport="sse", host="0.0.0.0", port=os.getenv('PORT', 8000))
     elif transport == "streamable-http":
         mcp.run(transport="streamable-http")
     else:
         mcp.run(transport="stdio")
+
+run()

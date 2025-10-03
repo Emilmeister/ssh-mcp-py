@@ -1,0 +1,12 @@
+web-server-01:
+          hostname: 176.108.251.52
+          port: 22
+          user: user1
+          key: >
+            -----BEGIN RSA PRIVATE KEY-----
+            MIIEpAIBAAKCAQEAwJ+A0sRLkkTNSK7xg/KQW8FL2zL4IHFE0Jd00JHGoTIjqb2rwEycrDvb
+            nVQvj5DrtLA3mn97QtDNOKmTmemT1lzTpnO1gH6YUtYFnwchIejsu2C298eqSBqPady+I+CF
+            EDDEn+y4KgLFEfGvZdY/r5f/3+UaG7KzNTUF0ogBc31rGSofKGVaYDAjiqiAWCjp4X/OUvPv
+            +d4TEZnuUNE9Rbiq2X34BqX72deAOEPXTkXAp0GsduPb5WD6nS7hH2ap/+62xFSaKmRG+vJg
+            .....
+            -----END RSA PRIVATE KEY-----
