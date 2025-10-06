@@ -35,7 +35,7 @@ def get_ssh_client() -> SSHClient:
 async def execute_ssh_command(
     hostname: str, 
     command: str, 
-    timeout: int = 300,
+    timeout: int = 60,
     max_length: int = 10000
 ) -> str:
     """Execute a command on a remote host via SSH.
@@ -54,12 +54,14 @@ async def execute_ssh_command(
         result = client.execute_command(hostname, command, timeout, max_length)
 
         if result["success"]:
-            output = f"""SUCCESS: Command executed on {hostname}
-Command: {command}
-Exit Code: {result["exit_code"]}
-
-STDOUT:
-{result["stdout"]}"""
+            output = f"""
+                SUCCESS: Command executed on {hostname}
+                Command: {command}
+                Exit Code: {result["exit_code"]}
+                
+                STDOUT:
+                {result["stdout"]}
+            """
 
             if result["stderr"]:
                 output += f"\n\nSTDERR:\n{result['stderr']}"
