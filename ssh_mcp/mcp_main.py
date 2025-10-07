@@ -56,7 +56,6 @@ async def execute_ssh_command(
         if result["success"]:
             output = f"""
                 SUCCESS: Command executed on {hostname}
-                Command: {command}
                 Exit Code: {result["exit_code"]}
                 
                 STDOUT:
