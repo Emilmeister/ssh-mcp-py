@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import paramiko
 import socks
+import yaml
 from paramiko import RSAKey
 
 from model.proxy import ProxyConfig
@@ -17,14 +18,22 @@ from ssh_config_patch import SshConfigWithPassword
 class SSHConfig:
     """Manages SSH configuration from SSH config file."""
 
-    def __init__(self):
+    def __init__(self, port, user, ip_address, ssh_key):
         """Initialize SSH configuration by loading from SSH config file."""
-        self.ssh_config = self._load_ssh_config()
+        self.ssh_config = self._load_ssh_config(port, user, ip_address, ssh_key)
 
-    def _load_ssh_config(self) -> paramiko.SSHConfig:
+    def _load_ssh_config(self, port, user, ip_address, ssh_key) -> paramiko.SSHConfig:
         """Load SSH configuration from config file."""
         try:
-            ssh_config = SshConfigWithPassword.from_text(base64.b64decode(os.getenv("SSH_CONFIG")).decode('utf-8'))
+            obj = {
+                "server": {
+                    "hostname": ip_address,
+                    "port": port,
+                    "user": user,
+                    "key": ssh_key
+                }
+            }
+            ssh_config = SshConfigWithPassword.from_text(yaml.dump(obj))
             return ssh_config
         except Exception:
             traceback.print_exc()

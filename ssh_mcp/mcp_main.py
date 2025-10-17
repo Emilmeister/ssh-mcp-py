@@ -6,34 +6,34 @@ from io import StringIO
 
 import paramiko
 from fastmcp import FastMCP
-from paramiko import RSAKey, PKey
+from fastmcp.server.dependencies import get_http_headers
+from paramiko import RSAKey
 
 from ssh_client import SSHClient, SSHConfig
+from secret_service import get_secret_last_version
+from vm_service import get_vm_info
+
+logging.basicConfig(level=logging.INFO)
 
 mcp = FastMCP(
     name="ssh-mcp",
     instructions="A Model Context Protocol for managing and interacting with multiple virtual machines over SSH",
 )
 
-_ssh_client = None
 
-
-def get_ssh_client() -> SSHClient:
+def get_ssh_client(port, user, ip_address, ssh_key) -> SSHClient:
     """Get or create SSH client instance."""
-    global _ssh_client
-    if _ssh_client is None:
-        try:
-            config = SSHConfig()
-            _ssh_client = SSHClient(config)
-        except Exception:
-            traceback.print_exc()
-            raise
+    try:
+        config = SSHConfig(port, user, ip_address, ssh_key)
+        _ssh_client = SSHClient(config)
+    except Exception:
+        traceback.print_exc()
+        raise
     return _ssh_client
 
 
 @mcp.tool()
 async def execute_ssh_command(
-    hostname: str, 
     command: str, 
     timeout: int = 60,
     max_length: int = 10000
@@ -41,7 +41,6 @@ async def execute_ssh_command(
     """Execute a command on a remote host via SSH.
 
     Args:
-        hostname: The hostname/alias of the target server as configured in SSH config
         command: The shell command to execute on the remote host
         timeout: SSH connection and command timeout in seconds (default: 30, max: 300)
         max_length: Maximum length of stdout/stderr output in characters (default: 1000, max: 10,000,000)
@@ -49,13 +48,34 @@ async def execute_ssh_command(
     Returns:
         Formatted string containing command output or error information
     """
+
+    headers = get_http_headers()
+    logging.info(f'http headers {headers}')
+
+    if 'project_id' not in headers:
+        return "Ошибка, project_id не передан в metadata"
+
+    if 'secret_id' not in headers:
+        return "Ошибка, secret_id не передан в metadata"
+
+    if 'token' not in headers:
+        return "Ошибка, token не передан в metadata"
+
+    hostname, user_name, ip_address = get_vm_info(headers)
+
+    ssh_key=get_secret_last_version(
+        secret_id=headers['secret_id'],
+        token=headers['token'],
+        project_id=headers['project_id']
+    )
+
     try:
-        client = get_ssh_client()
-        result = client.execute_command(hostname, command, timeout, max_length)
+        client = get_ssh_client(22, user_name, ip_address, ssh_key)
+        result = client.execute_command('server', command, timeout, max_length)
 
         if result["success"]:
             output = f"""
-                SUCCESS: Command executed on {hostname}
+                SUCCESS:
                 Exit Code: {result["exit_code"]}
                 
                 STDOUT:
@@ -67,59 +87,40 @@ async def execute_ssh_command(
 
             return output
         else:
-            return f"ERROR: Failed to execute command on {hostname}\nError: {result['error']}"
+            return f"ERROR: Failed to execute command\nError: {result['error']}"
 
     except Exception as e:
         traceback.print_exc()
         return f"ERROR: Failed to execute command: {str(e)}"
 
 
-@mcp.tool()
-async def list_ssh_hosts() -> str:
-    """List all configured SSH hosts.
-
-    Returns:
-        Formatted string containing all configured hosts
-    """
-    try:
-        client = get_ssh_client()
-        hosts = client.list_hosts()
-
-        if not hosts:
-            return "No SSH hosts configured."
-
-        output = "Configured SSH Hosts:\n" + "=" * 25 + "\n\n"
-        for host in hosts:
-            output += f"Host: {host}\n"
-
-        return output
-
-    except Exception as e:
-        traceback.print_exc()
-        return f"ERROR: Failed to list hosts: {str(e)}"
 
 
 @mcp.tool()
-async def get_host_info(hostname: str) -> str:
+async def get_host_info() -> str:
     """Get detailed information about a specific SSH host.
 
     Args:
-        hostname: The hostname/alias of the target server
+        None
 
     Returns:
         Formatted string containing host configuration details
     """
-    try:
-        client = get_ssh_client()
-        host_config = client.config.get_host_config(hostname)
+    headers = get_http_headers()
+    logging.info(f'http headers {headers}')
 
-        if not host_config:
-            return f"ERROR: Host '{hostname}' not found in configuration."
+    if 'vm_id' not in headers:
+        return "Ошибка, vm_id не передан в metadata"
+    if 'token' not in headers:
+        return "Ошибка, token не передан в metadata"
+
+    try:
+
+        hostname, user_name, ip_address = get_vm_info(headers)
 
         output = f"Host Information for '{hostname}':\n" + "=" * 35 + "\n\n"
-        output += f"Hostname: {host_config.get('hostname', hostname)}\n"
-        output += f"Port: {host_config.get('port', 22)}\n"
-        output += f"User: {host_config.get('user', 'N/A')}\n"
+        output += f"Host ip: {ip_address}\n"
+        output += f"User: {user_name}\n"
 
         return output
 
@@ -139,6 +140,8 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
     Returns:
         String indicating whether the connection was successful or failed
     """
+    headers = get_http_headers()
+    logging.info(f'http headers {headers}')
     try:
         client = get_ssh_client()
         host_config = client.config.get_host_config(hostname)
