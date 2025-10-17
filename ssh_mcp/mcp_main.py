@@ -130,11 +130,10 @@ async def get_host_info() -> str:
 
 
 @mcp.tool()
-async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
+async def test_ssh_connection(timeout: int = 30) -> str:
     """Test SSH connection to a remote host without executing any commands.
 
     Args:
-        hostname: The hostname/alias of the target server to test
         timeout: SSH connection timeout in seconds (default: 30, max: 300)
 
     Returns:
@@ -142,9 +141,27 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
     """
     headers = get_http_headers()
     logging.info(f'http headers {headers}')
+
+    if 'project_id' not in headers:
+        return "Ошибка, project_id не передан в metadata"
+
+    if 'secret_id' not in headers:
+        return "Ошибка, secret_id не передан в metadata"
+
+    if 'token' not in headers:
+        return "Ошибка, token не передан в metadata"
+
+    hostname, user_name, ip_address = get_vm_info(headers)
+
+    ssh_key = get_secret_last_version(
+        secret_id=headers['secret_id'],
+        token=headers['token'],
+        project_id=headers['project_id']
+    )
+
     try:
-        client = get_ssh_client()
-        host_config = client.config.get_host_config(hostname)
+        client = get_ssh_client(22, user_name, ip_address, ssh_key)
+        host_config = client.config.get_host_config('server')
 
         if not host_config:
             return f"ERROR: Host '{hostname}' not found in configuration."
@@ -155,30 +172,6 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        sock = None
-        # Check if proxy config exists for this host
-        proxy = client.proxy_config.get(hostname) if client.proxy_config else None
-        if proxy:
-            try:
-                import socks
-
-                sock = socks.socksocket()
-                sock.set_proxy(
-                    proxy_type=socks.SOCKS5,
-                    addr=proxy.host,
-                    port=proxy.port,
-                    username=proxy.username,
-                    password=proxy.password,
-                )
-                sock.connect(
-                    (
-                        host_config.get("hostname", hostname),
-                        int(host_config.get("port", 22)),
-                    )
-                )
-            except Exception:
-                return f"ERROR: Failed to connect via SOCKS5 proxy for {hostname}"
-
         try:
             ssh_client.connect(
                 hostname=host_config.get("hostname", hostname),
@@ -186,7 +179,6 @@ async def test_ssh_connection(hostname: str, timeout: int = 30) -> str:
                 username=host_config.get("user", os.getenv("USER")),
                 pkey=RSAKey.from_private_key(StringIO(host_config.get("identityfile")[0])),
                 timeout=command_timeout,
-                sock=sock,
             )
 
             return f"SUCCESS: Connection to {hostname} successful"
