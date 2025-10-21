@@ -201,11 +201,11 @@ async def test_ssh_connection(timeout: int = 30) -> str:
 
 def run():
     """Run the SSH MCP server."""
-    transport = os.getenv("MCP_TRANSPORT", "sse")
+    transport = os.getenv("MCP_TRANSPORT", "streamable-http")
     if transport == "sse":
         mcp.run(transport="sse", host="0.0.0.0", port=os.getenv('PORT', 8000))
     elif transport == "streamable-http":
-        mcp.run(transport="streamable-http")
+        mcp.run(transport="streamable-http", host="0.0.0.0", port=os.getenv('PORT', 8000))
     else:
         mcp.run(transport="stdio")
 
