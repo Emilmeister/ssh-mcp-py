@@ -4,6 +4,6 @@ services:
     ports:
       - 8000:8000
     environment:
-      CLOUD_RU_SECRET_API_BASE_URL: https://console.cloud.ru/u-api/scsm
+      CLOUD_RU_U_API_BASE_URL: https://console.cloud.ru/u-api
       CLOUD_RU_PUBLIC_API_BASE_URL: https://compute.api.cloud.ru/api
       MCP_TRANSPORT: streamable-http

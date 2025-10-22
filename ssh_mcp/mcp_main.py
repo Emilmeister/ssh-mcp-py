@@ -1,4 +1,5 @@
 """SSH MCP server for managing SSH connections and executing commands on remote hosts."""
+import asyncio
 import logging
 import os
 import traceback
@@ -11,6 +12,9 @@ from paramiko import RSAKey
 
 from ssh_client import SSHClient, SSHConfig
 from secret_service import get_secret_last_version
+from security_groups_service import get_security_groups_rules_by_id, create_security_groups, \
+    create_security_groups_rule, delete_security_groups_rule
+from vm_interface_service import update_interface
 from vm_service import get_vm_info
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +34,21 @@ def get_ssh_client(port, user, ip_address, ssh_key) -> SSHClient:
         traceback.print_exc()
         raise
     return _ssh_client
+
+def verify_headers(headers: dict):
+    if 'project_id' not in headers:
+        return "Ошибка, project_id не передан в metadata"
+
+    if 'secret_id' not in headers:
+        return "Ошибка, secret_id не передан в metadata"
+
+    if 'token' not in headers:
+        return "Ошибка, token не передан в metadata"
+
+    if 'vm_id' not in headers:
+        return "Ошибка, vm_id не передан в metadata"
+
+    return None
 
 
 @mcp.tool()
@@ -52,16 +71,18 @@ async def execute_ssh_command(
     headers = get_http_headers()
     logging.info(f'http headers {headers}')
 
-    if 'project_id' not in headers:
-        return "Ошибка, project_id не передан в metadata"
+    verify_headers_error = verify_headers(headers)
+    if verify_headers_error:
+        return verify_headers_error
 
-    if 'secret_id' not in headers:
-        return "Ошибка, secret_id не передан в metadata"
-
-    if 'token' not in headers:
-        return "Ошибка, token не передан в metadata"
-
-    hostname, user_name, ip_address = get_vm_info(headers)
+    (
+        hostname,
+        user_name,
+        ip_address,
+        security_groups,
+        availability_zone_id,
+        interface_id
+    ) = get_vm_info(headers['vm_id'], headers['token'])
 
     ssh_key=get_secret_last_version(
         secret_id=headers['secret_id'],
@@ -97,32 +118,46 @@ async def execute_ssh_command(
 
 
 @mcp.tool()
-async def get_host_info() -> str:
-    """Get detailed information about a specific SSH host.
-
-    Args:
-        None
+async def get_host_info():
+    """
+    Получить детальную информацию о виртуальной машине:
+     - Имя хоста
+     - Публичный IP адрес
+     - Имя пользователя
+     - Информация о "Группах безопасности" и портах виртуальной машины, доступных из интернета
 
     Returns:
-        Formatted string containing host configuration details
+        JSON с необходимой информацией
     """
     headers = get_http_headers()
     logging.info(f'http headers {headers}')
 
-    if 'vm_id' not in headers:
-        return "Ошибка, vm_id не передан в metadata"
-    if 'token' not in headers:
-        return "Ошибка, token не передан в metadata"
+    verify_headers_error = verify_headers(headers)
+    if verify_headers_error:
+        return verify_headers_error
 
     try:
 
-        hostname, user_name, ip_address = get_vm_info(headers)
+        (
+            hostname,
+            user_name,
+            ip_address,
+            security_groups,
+            availability_zone_id,
+            interface_id
+        ) = get_vm_info(headers['vm_id'], headers['token'])
 
-        output = f"Host Information for '{hostname}':\n" + "=" * 35 + "\n\n"
-        output += f"Host ip: {ip_address}\n"
-        output += f"User: {user_name}\n"
+        for security_group in security_groups:
+            security_group_rules = get_security_groups_rules_by_id(security_group['id'], headers['token'])
+            security_group['security_group_rules'] = security_group_rules
 
-        return output
+
+        return {
+            'hostname': hostname,
+            'host_ip': ip_address,
+            'user': user_name,
+            'security_groups': security_groups
+        }
 
     except Exception as e:
         traceback.print_exc()
@@ -142,16 +177,18 @@ async def test_ssh_connection(timeout: int = 30) -> str:
     headers = get_http_headers()
     logging.info(f'http headers {headers}')
 
-    if 'project_id' not in headers:
-        return "Ошибка, project_id не передан в metadata"
+    verify_headers_error = verify_headers(headers)
+    if verify_headers_error:
+        return verify_headers_error
 
-    if 'secret_id' not in headers:
-        return "Ошибка, secret_id не передан в metadata"
-
-    if 'token' not in headers:
-        return "Ошибка, token не передан в metadata"
-
-    hostname, user_name, ip_address = get_vm_info(headers)
+    (
+        hostname,
+        user_name,
+        ip_address,
+        security_groups,
+        availability_zone_id,
+        interface_id
+    ) = get_vm_info(headers['vm_id'], headers['token'])
 
     ssh_key = get_secret_last_version(
         secret_id=headers['secret_id'],
@@ -188,15 +225,125 @@ async def test_ssh_connection(timeout: int = 30) -> str:
             return f"ERROR: Connection to {hostname} failed: {str(e)}"
         finally:
             ssh_client.close()
-            if sock:
-                try:
-                    sock.close()
-                except Exception:
-                    pass
 
     except Exception as e:
         traceback.print_exc()
         return f"ERROR: Failed to test connection: {str(e)}"
+
+
+
+
+@mcp.tool()
+async def create_security_group(
+        name: str,
+        description: str
+):
+    """
+    Создать группу безопасности для виртуальной машины.
+
+    Args:
+        name: Название группы безопасности на английском языке, где вместо пробелов тире ("-")
+        description: Описание для чего создана группа безопасности
+
+    Returns:
+        Результат создания группы безопасности
+    """
+
+    headers = get_http_headers()
+    logging.info(f'http headers {headers}')
+
+    verify_headers_error = verify_headers(headers)
+    if verify_headers_error:
+        return verify_headers_error
+
+    (
+        hostname,
+        user_name,
+        ip_address,
+        security_groups,
+        availability_zone_id,
+        interface_id
+    ) = get_vm_info(headers['vm_id'], headers['token'])
+
+    create_result = create_security_groups(
+        name,
+        description,
+        availability_zone_id,
+        headers['project_id'],
+        headers['token']
+    )
+
+    new_security_group_ids = [x['id'] for x in security_groups]
+    new_security_group_ids.append(create_result['id'])
+
+    await asyncio.sleep(5)
+
+    update_result = update_interface(interface_id, new_security_group_ids, headers['token'])
+
+    return {
+        "create_security_group_result": create_result,
+        "add_security_group_to_vm_result": update_result
+    }
+
+@mcp.tool()
+async def create_security_group_rule(
+        security_group_id: str,
+        description: str,
+        port_range: str
+):
+    """
+    Создать правило группы безопасности для виртуальной машины. (Открывает закрытые порты)
+
+    Args:
+        security_group_id: uuid группы безопасности
+        description: Описание какие сервисы используют порты на русском языке
+        port_range: Промежуток портов в формате "8000:8000" если один порт, или "8000:8010" если список портов
+
+    Returns:
+        Результат создания правила группы безопасности
+    """
+    headers = get_http_headers()
+    logging.info(f'http headers {headers}')
+
+    verify_headers_error = verify_headers(headers)
+    if verify_headers_error:
+        return verify_headers_error
+
+    return create_security_groups_rule(
+        security_group_id,
+        headers['token'],
+        description,
+        port_range
+    )
+
+@mcp.tool()
+async def remove_security_group_rule(
+        security_group_id: str,
+        security_group_rule_id: str,
+):
+    """
+    Удалить правило группы безопасности для виртуальной машины. (Закрыть открытые порты)
+
+    Args:
+        security_group_id: uuid группы безопасности
+        security_group_rule_id: uuid правила группы безопасности
+    Returns:
+        Результат удаления правила группы безопасности
+    """
+    headers = get_http_headers()
+    logging.info(f'http headers {headers}')
+
+    verify_headers_error = verify_headers(headers)
+    if verify_headers_error:
+        return verify_headers_error
+
+    delete_security_groups_rule(
+        security_group_id,
+        security_group_rule_id,
+        headers['token']
+    )
+
+    return "Deleted"
 
 
 def run():
