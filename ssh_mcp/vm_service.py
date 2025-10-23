@@ -28,6 +28,11 @@ def get_vm_info(vm_id: str, token: str):
 
     for interface in response['interfaces']:
 
+        if 'type' in interface and interface['type'] == 'regular':
+            interface_id = interface['id']
+            ip_address = interface['floating_ip']['ip_address']
+            security_groups = interface['security_groups']
+
         if 'type' in interface and interface['type'] == 'direct_ip':
             interface_id = interface['id']
             ip_address = interface['ip_address']

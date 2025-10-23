@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Optional
 import paramiko
 import socks
 import yaml
-from paramiko import RSAKey
+from paramiko import RSAKey, Ed25519Key, ECDSAKey
+from cryptography.hazmat.primitives import serialization, asymmetric
 
 from model.proxy import ProxyConfig
 from ssh_config_patch import SshConfigWithPassword
@@ -132,11 +133,28 @@ class SSHClient:
                 }
 
         try:
+
+            key = host_config.get("identityfile")[0].encode("utf-8")
+
+            try:
+                loaded = serialization.load_ssh_private_key(data=key, password=None)
+            except ValueError:
+                loaded = serialization.load_pem_private_key(data=key, password=None)
+
+            if isinstance(loaded, asymmetric.rsa.RSAPrivateKey):
+                key_class = RSAKey
+            elif isinstance(loaded, asymmetric.ed25519.Ed25519PrivateKey):
+                key_class = Ed25519Key
+            elif isinstance(loaded, asymmetric.ec.EllipticCurvePrivateKey):
+                key_class = ECDSAKey
+            else:
+                raise ValueError("Invalid ssh private key")
+
             ssh_client.connect(
                 hostname=host_config.get("hostname", hostname),
                 port=host_config.get("port", 22),
                 username=host_config.get("user", os.getenv("USER")),
-                pkey=RSAKey.from_private_key(StringIO(host_config.get("identityfile")[0])),
+                pkey=key_class.from_private_key(StringIO(host_config.get("identityfile")[0])),
                 timeout=command_timeout,
                 sock=sock,
             )
@@ -162,6 +180,9 @@ class SSHClient:
                 "exit_code": exit_code,
             }
 
+        except TimeoutError as e:
+            traceback.print_exc()
+            return {"success": False, "error": f"SSH Команда не успела выполниться за {timeout} секунд."}
         except Exception as e:
             traceback.print_exc()
             return {"success": False, "error": str(e)}

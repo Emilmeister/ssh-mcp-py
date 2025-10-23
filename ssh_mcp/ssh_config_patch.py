@@ -59,9 +59,6 @@ class SshConfigWithPassword(paramiko.SSHConfig):
 
                     # identityfile может быть списком
                     if config_key == 'identityfile':
-                        yaml_value = yaml_value.replace(' ', '\n')
-                        yaml_value = yaml_value.replace('-----BEGIN\nRSA\nPRIVATE\nKEY-----', '-----BEGIN RSA PRIVATE KEY-----')
-                        yaml_value = yaml_value.replace('-----END\nRSA\nPRIVATE\nKEY-----', '-----END RSA PRIVATE KEY-----')
                         if isinstance(yaml_value, list):
                             context["config"][config_key] = yaml_value
                         else:

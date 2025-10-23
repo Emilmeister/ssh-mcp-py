@@ -55,7 +55,7 @@ def verify_headers(headers: dict):
 async def execute_ssh_command(
     command: str, 
     timeout: int = 60,
-    max_length: int = 10000
+    max_length: int = 2000
 ) -> str:
     """Execute a command on a remote host via SSH.
 
@@ -198,33 +198,14 @@ async def test_ssh_connection(timeout: int = 30) -> str:
 
     try:
         client = get_ssh_client(22, user_name, ip_address, ssh_key)
-        host_config = client.config.get_host_config('server')
 
-        if not host_config:
-            return f"ERROR: Host '{hostname}' not found in configuration."
 
-        # Validate timeout parameter
-        command_timeout = min(max(timeout, 1), 300)  # 1s to 5 minutes
+        result = client.execute_command('server', "pwd", timeout)['success']
 
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        try:
-            ssh_client.connect(
-                hostname=host_config.get("hostname", hostname),
-                port=host_config.get("port", 22),
-                username=host_config.get("user", os.getenv("USER")),
-                pkey=RSAKey.from_private_key(StringIO(host_config.get("identityfile")[0])),
-                timeout=command_timeout,
-            )
-
+        if result:
             return f"SUCCESS: Connection to {hostname} successful"
-
-        except Exception as e:
-            print(traceback.format_exc())
-            return f"ERROR: Connection to {hostname} failed: {str(e)}"
-        finally:
-            ssh_client.close()
+        else:
+            return f"ERROR: Connection to {hostname} failed"
 
     except Exception as e:
         traceback.print_exc()
@@ -282,6 +263,7 @@ async def create_security_group(
 
     return {
         "create_security_group_result": create_result,
+        # Потенциально можно возвращать меньше данных
         "add_security_group_to_vm_result": update_result
     }
 
