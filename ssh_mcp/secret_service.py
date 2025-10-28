@@ -15,7 +15,7 @@ def get_secret_last_version(secret_id: str, token: str, project_id: str):
 
     logging.info(f'Просмотр секрета={response}')
 
-    name = response['name']
+    path = response['path']
 
     response = requests.get(
         url=f'{os.getenv("CLOUD_RU_U_API_BASE_URL")}/scsm/v1/secrets/{secret_id}/versions',
@@ -35,7 +35,7 @@ def get_secret_last_version(secret_id: str, token: str, project_id: str):
 
 
     response = requests.get(
-        url=f'{os.getenv("CLOUD_RU_U_API_BASE_URL")}/scsm/v2/version/{name}',
+        url=f'{os.getenv("CLOUD_RU_U_API_BASE_URL")}/scsm/v2/version/{path}',
         headers={"Authorization": f"Bearer {token}"},
         params={
             "projectId": project_id,
