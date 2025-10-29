@@ -1,10 +1,18 @@
-# MCP для работы с виртуальными машинами через командную строку
+# MCP для работы с виртуальными машинами и группами безопасности cloud.ru
 
-### Для запуска нужно:
+### Переменные окружения:
 
-1. Поправить файл config.yaml добавив туда свои настройки
-2. Закинуть base64 кодированный текст из config.yaml в переменную SSH_CONFIG
-3. Выполнить ```docker compose build && docker compose up -d```
-4. MCP sse сервер развернется на порту 8000
+```
+CLOUD_RU_U_API_BASE_URL=https://console.cloud.ru/u-api
+CLOUD_RU_PUBLIC_API_BASE_URL=https://compute.api.cloud.ru/api
+MCP_TRANSPORT=streamable-http
+```
 
-Дока по opensource версии хранится в файле README_old.md https://github.com/sondt2709/ssh-mcp-py
+### Запуск
+
+```shell
+docker compose up --build -d
+```
+
+
+
